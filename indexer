@@ -1,0 +1,128 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# https://www.linuxquestions.org/questions/blog/sag47-492023/headless-file-conversion-using-libreoffice-as-a-service-35310/
+
+import argparse
+import lucene
+import mimetypes
+import os
+import re
+import shlex
+import subprocess
+import sys
+import threading
+import time
+
+
+class Ticker(threading.Thread):
+    def __init__(self, msg):
+        threading.Thread.__init__(self)
+        self.msg = msg
+        self.event = threading.Event()
+    def __enter__(self):
+        self.start()
+    def __exit__(self, ex_type, ex_value, ex_traceback):
+        self.event.set()
+        self.join()
+    def run(self):
+        sys.stdout.write(self.msg)
+        while not self.event.isSet():
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            self.event.wait(1)
+
+
+class indexer:
+
+    def __init__(self, **kwargs):
+        soffice_cmd = '''soffice --nologo --headless --nofirststartwizard --%s="socket,host=127.0.0.1,port=2002;urp;StarOffice.Service"'''
+
+        self.__directory = kwargs['path']
+        storeDir = kwargs['index']
+
+        print('Starting soffice')
+        self.__soffice_proc = subprocess.Popen(
+                shlex.split(soffice_cmd%'accept'),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT
+                )
+        lucene.initVM()
+
+        if not os.path.exists(storeDir):
+            os.makedirs(storeDir)
+        store = lucene.SimpleFSDirectory(lucene.File(storeDir))
+        self.__writer = lucene.IndexWriter(store,
+                lucene.StandardAnalyzer(lucene.Version.LUCENE_CURRENT),
+                True,
+                lucene.IndexWriter.MaxFieldLength.LIMITED)
+        self.__writer.setMaxFieldLength(1048576)
+
+
+        unknown_type = [
+                'application/x-tar',
+                'application/gzip',
+                'application/zip',
+                #'application/pdf',
+                'image/jpeg',
+                ]
+        spread_match = re.compile('spreadsheet')
+        with Ticker("."):
+            for (path, dirs, files) in os.walk(self.__directory):
+                if re.search('\.git', path):
+                    continue
+
+                for f in files:
+                    f_path = os.path.join(path, f)
+                    f_type = mimetypes.guess_type(f_path)[0]
+                    if f_type not in unknown_type and f_type != None:
+                        if spread_match.search(f_type):
+                            self.__convert_doc(f_path, 'csv')
+                        else:
+                            self.__convert_doc(f_path, 'text')
+                self.__writer.commit()
+
+        self.__writer.close()
+
+    def __convert_doc(self, doc, out='text'):
+        devnull = open('/dev/null','w')
+        try:
+            command = u'''unoconv --stdout -f %s "%s"''' % (out, doc)
+            p = subprocess.check_output(shlex.split(command), stderr=devnull)
+
+            ldoc = lucene.Document()
+            ldoc.add(lucene.Field("name", os.path.basename(doc),
+                                 lucene.Field.Store.YES,
+                                 lucene.Field.Index.NOT_ANALYZED))
+            ldoc.add(lucene.Field("path", os.path.dirname(doc),
+                                 lucene.Field.Store.YES,
+                                 lucene.Field.Index.NOT_ANALYZED))
+            ldoc.add(lucene.Field("contents", p,
+                                 lucene.Field.Store.NO,
+                                 lucene.Field.Index.ANALYZED))
+            self.__writer.addDocument(ldoc)
+        except UnicodeDecodeError:
+            print 'Unicode error for ', doc
+            pass
+        except subprocess.CalledProcessError:
+            print 'unoconv error for ', doc
+            pass
+
+    def __del__(self):
+        print('Killing soffice')
+        self.__soffice_proc.terminate()
+        pass
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description='Index a file tree.')
+    parser.add_argument('--directory', '-d', help='Directory path, either relative or full', required=True)
+    parser.add_argument('--index', '-i', help='Index directory', required=True)
+
+    args = parser.parse_args()
+
+    indexer = indexer(
+            path=args.directory,
+            index=args.index,
+            )
+    time.sleep(10)
