@@ -85,8 +85,11 @@ class indexer:
                         self.__convert_doc(f_path, 'csv')
                     else:
                         self.__convert_doc(f_path, 'text')
-                    sys.stdout.write(".")
+                    sys.stdout.write(u'♥')
                     sys.stdout.flush()
+                else:
+                    sys.stderr.write(u'\u2193')
+                    sys.stderr.flush()
             self.__writer.commit()
 
         print 'Docs: %i' % self.__writer.numDocs()
@@ -110,10 +113,12 @@ class indexer:
                                  lucene.Field.Index.ANALYZED))
             self.__writer.addDocument(ldoc)
         except UnicodeDecodeError:
-            print 'Unicode error for ', doc
+            sys.stderr.write(u'\u2193')
+            sys.stderr.flush()
             pass
         except subprocess.CalledProcessError:
-            sys.stderr.write(u'Unoconv error for %s'% doc)
+            sys.stderr.write(u'\u2193')
+            sys.stderr.flush()
             pass
 
     def __del__(self):
@@ -136,4 +141,4 @@ if __name__ == '__main__':
             index=args.index,
             )
     print 'Waiting for unfinished processes'
-    time.sleep(10)
+    time.sleep(5)
