@@ -14,3 +14,10 @@
 
 Under Linux, just use ```readpst -S -D <file>``` in order to extract its content.
 PST is the outlook archive format. You might need to install pst-utils (for Debian).
+
+### TODO
+
+* Multithread/multiproc
+* Index update instead of re-write from 0
+* Better error management
+* Logfile
