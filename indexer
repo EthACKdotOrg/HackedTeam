@@ -11,27 +11,9 @@ import re
 import shlex
 import subprocess
 import sys
-import threading
 import time
 
-
-class Ticker(threading.Thread):
-    def __init__(self, msg):
-        threading.Thread.__init__(self)
-        self.msg = msg
-        self.event = threading.Event()
-    def __enter__(self):
-        self.start()
-    def __exit__(self, ex_type, ex_value, ex_traceback):
-        self.event.set()
-        self.join()
-    def run(self):
-        sys.stdout.write(self.msg)
-        while not self.event.isSet():
-            sys.stdout.write(".")
-            sys.stdout.flush()
-            self.event.wait(1)
-
+from BeautifulSoup import BeautifulSoup
 
 class indexer:
 
@@ -85,6 +67,9 @@ class indexer:
                 if f_type not in unknown_type and f_type != None:
                     if spread_match.search(f_type):
                         self.__convert_doc(f_path, 'csv')
+                    elif f_type == 'text/html':
+                        content = self.__stripAllTags(f_path)
+                        self.__index_doc(content=content, path=f_path)
                     else:
                         self.__convert_doc(f_path, 'text')
                     sys.stdout.write(u'♥')
@@ -93,33 +78,24 @@ class indexer:
                     sys.stderr.write(u'\u2193')
                     sys.stderr.flush()
             self.__writer.commit()
+            print ''
+            print 'Docs so far: ', self.__writer.numDocs()
 
-        print 'Docs: %i' % self.__writer.numDocs()
-        self.__writer.close()
+        print ''
+        print 'Docs: ', self.__writer.numDocs()
 
     def __construct_doc_path(self, doc):
         p = os.path.normpath(doc)
         r = re.compile('Hacked Team')
         return r.split(p)[1]
+
     def __convert_doc(self, doc, out='text'):
         devnull = open('/dev/null','w')
         try:
             command = u'''unoconv --stdout -f %s "%s"''' % (out, doc)
             p = subprocess.check_output(shlex.split(command), stderr=devnull)
+            self.__index_doc(content=p, path=doc)
 
-            doc_path = self.__construct_doc_path(doc)
-
-            ldoc = lucene.Document()
-            ldoc.add(lucene.Field("name", os.path.basename(doc),
-                                 lucene.Field.Store.YES,
-                                 lucene.Field.Index.NOT_ANALYZED))
-            ldoc.add(lucene.Field("path", doc_path,
-                                 lucene.Field.Store.YES,
-                                 lucene.Field.Index.NOT_ANALYZED))
-            ldoc.add(lucene.Field("contents", p,
-                                 lucene.Field.Store.NO,
-                                 lucene.Field.Index.ANALYZED))
-            self.__writer.addDocument(ldoc)
         except UnicodeDecodeError:
             sys.stderr.write(u'✞')
             sys.stderr.flush()
@@ -128,6 +104,28 @@ class indexer:
             sys.stderr.write(u'✞')
             sys.stderr.flush()
             pass
+
+    def __index_doc(self, **kwargs):
+        content = kwargs['content']
+        path    = kwargs['path']
+
+        doc_path = self.__construct_doc_path(path)
+
+        ldoc = lucene.Document()
+        ldoc.add(lucene.Field("name", os.path.basename(doc_path),
+                             lucene.Field.Store.YES,
+                             lucene.Field.Index.NOT_ANALYZED))
+        ldoc.add(lucene.Field("path", doc_path,
+                             lucene.Field.Store.YES,
+                             lucene.Field.Index.NOT_ANALYZED))
+        ldoc.add(lucene.Field("content", content,
+                             lucene.Field.Store.NO,
+                             lucene.Field.Index.ANALYZED))
+        self.__writer.addDocument(ldoc)
+
+    def __stripAllTags(self, doc):
+        soup = BeautifulSoup(open(doc))
+        return soup.getText()
 
     def __del__(self):
         self.__writer.commit()
