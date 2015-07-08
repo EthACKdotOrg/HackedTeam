@@ -61,6 +61,7 @@ class indexer:
 
             print ''
             print 'Doing: ', path
+            start_time = time.time()
             for f in files:
                 f_path = os.path.join(path, f)
                 f_type = mimetypes.guess_type(f_path)[0]
@@ -79,7 +80,7 @@ class indexer:
                     sys.stderr.flush()
             self.__writer.commit()
             print ''
-            print 'Docs so far: ', self.__writer.numDocs()
+            print 'Docs so far: %i in %f' % (self.__writer.numDocs(), time.time() - start_time)
 
         print ''
         print 'Docs: ', self.__writer.numDocs()
