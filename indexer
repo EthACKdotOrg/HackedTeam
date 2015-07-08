@@ -117,6 +117,8 @@ class indexer:
             pass
 
     def __del__(self):
+        self.__writer.commit()
+        self.__writer.close()
         print('Killing soffice')
         self.__soffice_proc.terminate()
         pass
