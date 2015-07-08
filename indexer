@@ -77,6 +77,8 @@ class indexer:
             if re.search('\.git', path):
                 continue
 
+            print ''
+            print 'Doing: ', path
             for f in files:
                 f_path = os.path.join(path, f)
                 f_type = mimetypes.guess_type(f_path)[0]
@@ -95,17 +97,23 @@ class indexer:
         print 'Docs: %i' % self.__writer.numDocs()
         self.__writer.close()
 
+    def __construct_doc_path(self, doc):
+        p = os.path.normpath(doc)
+        r = re.compile('Hacked Team')
+        return r.split(p)[1]
     def __convert_doc(self, doc, out='text'):
         devnull = open('/dev/null','w')
         try:
             command = u'''unoconv --stdout -f %s "%s"''' % (out, doc)
             p = subprocess.check_output(shlex.split(command), stderr=devnull)
 
+            doc_path = self.__construct_doc_path(doc)
+
             ldoc = lucene.Document()
             ldoc.add(lucene.Field("name", os.path.basename(doc),
                                  lucene.Field.Store.YES,
                                  lucene.Field.Index.NOT_ANALYZED))
-            ldoc.add(lucene.Field("path", os.path.dirname(doc),
+            ldoc.add(lucene.Field("path", doc_path,
                                  lucene.Field.Store.YES,
                                  lucene.Field.Index.NOT_ANALYZED))
             ldoc.add(lucene.Field("contents", p,
