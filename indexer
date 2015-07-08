@@ -113,11 +113,11 @@ class indexer:
                                  lucene.Field.Index.ANALYZED))
             self.__writer.addDocument(ldoc)
         except UnicodeDecodeError:
-            sys.stderr.write(u'\u2193')
+            sys.stderr.write(u'✞')
             sys.stderr.flush()
             pass
         except subprocess.CalledProcessError:
-            sys.stderr.write(u'\u2193')
+            sys.stderr.write(u'✞')
             sys.stderr.flush()
             pass
 
